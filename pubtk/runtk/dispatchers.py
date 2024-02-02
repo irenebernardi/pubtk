@@ -19,9 +19,11 @@ def format_env(dictionary, index=0, value_type=None):
     cl = len(dictionary)
     get_type = staticmethod(lambda x: type(x).__name__)
     return {"{}{}{}".format(value_type or get_type(value).upper(), runtk.GREPSTR, cl + i):
-                  "{}={}".format(key, value) for i, (key, value) in enumerate(dictionary.items())}
+                "{}={}".format(key, value) for i, (key, value) in enumerate(dictionary.items())}
 
     # convert dictionary to proper elements
+
+
 class Dispatcher(object):
     """
     base class for Dispatcher
@@ -35,10 +37,10 @@ class Dispatcher(object):
         the string value that generates labels for relevant values (filename and environment dictionary)
     gid ->
         a generated ID string that is unique to a Dispatcher <-> Runner pair.
-    """ 
-    obj_count = 0 # persistent count N.B. may be shared between objects.
+    """
+    obj_count = 0  # persistent count N.B. may be shared between objects.
 
-    def __init__(self, env=False, grepstr=runtk.GREPSTR, gid = False, **kwargs):
+    def __init__(self, env=False, grepstr=runtk.GREPSTR, gid=False, **kwargs):
         """
         Parameters
         ----------
@@ -52,15 +54,16 @@ class Dispatcher(object):
         created upon subprocess call.
         """
 
-        self.__dict__ = kwargs # the __dict__ has to come first or else env won't work...?
-        self.env = env or {} # if env is False, then set to empty dictionary
+        self.__dict__ = kwargs  # the __dict__ has to come first or else env won't work...?
+        self.env = env or {}  # if env is False, then set to empty dictionary
         self.grepstr = grepstr
         self.gid = gid
         Dispatcher.obj_count = Dispatcher.obj_count + 1
 
     def add_json(self):
         pass
-    def update_env(self, dictionary, value_type=None, format = True, **kwargs):
+
+    def update_env(self, dictionary, value_type=None, format=True, **kwargs):
         """
         Parameters
         ----------
@@ -92,7 +95,7 @@ class Dispatcher(object):
         cl = len(self.env)
         get_type = staticmethod(lambda x: type(x).__name__)
         return {"{}{}{}".format(value_type or get_type(value).upper(), self.grepstr, cl + i):
-                      "{}={}".format(key, value) for i, (key, value) in enumerate(dictionary.items())}
+                    "{}={}".format(key, value) for i, (key, value) in enumerate(dictionary.items())}
 
         # convert dictionary to proper elements
 
@@ -128,10 +131,12 @@ class Dispatcher(object):
             json.dump(self.env, fptr)
             fptr.close()
 
+
 class NOF_Dispatcher(Dispatcher):
     """
     No File Dispatcher, everything is run without generation of shell scripts.
     """
+
     def __init__(self, cmdstr='', env=None, **kwargs):
         """
         Parameters
@@ -147,13 +152,15 @@ class NOF_Dispatcher(Dispatcher):
     def run(self):
         super().init_run()
         self.proc = subprocess.run(self.cmdstr.split(), env=self.env, text=True, stdout=subprocess.PIPE, \
-            stderr=subprocess.PIPE)
+                                   stderr=subprocess.PIPE)
         return self.proc.stdout, self.proc.stderr
+
 
 class SH_Dispatcher(Dispatcher):
     """
     Shell based Dispatcher generating shell script to submit jobs
     """
+
     def __init__(self, cwd="", submit=False, **kwargs):
         """
         initializes dispatcher
@@ -167,7 +174,7 @@ class SH_Dispatcher(Dispatcher):
         self.cwd = cwd
         self.submit = submit or Submit()
         self.jobid = -1
-        #self.label = self.gid
+        # self.label = self.gid
 
     def create_job(self, **kwargs):
         super().init_run()
@@ -183,6 +190,7 @@ class SH_Dispatcher(Dispatcher):
         self.create_job(**kwargs)
         self.jobid = self.submit.submit_job()
 
+
 class SFS_Dispatcher(SH_Dispatcher):
     """
     Shared File System Dispatcher utilizing file operations to submit jobs and collect results
@@ -191,7 +199,8 @@ class SFS_Dispatcher(SH_Dispatcher):
 
     def create_job(self, **kwargs):
         super().create_job(**kwargs)
-        self.watchfile = "{}/{}.sgl".format(self.cwd, self.label)  # the signal file (only to represent completion of job)
+        self.watchfile = "{}/{}.sgl".format(self.cwd,
+                                            self.label)  # the signal file (only to represent completion of job)
         self.readfile = "{}/{}.out".format(self.cwd, self.label)  # the read file containing the actual results
         self.shellfile = "{}/{}.sh".format(self.cwd, self.label)  # the shellfile that will be submitted
         self.runfile = "{}/{}.run".format(self.cwd, self.label)  # the runfile created by the job
@@ -205,7 +214,7 @@ class SFS_Dispatcher(SH_Dispatcher):
             fptr = open(self.readfile, 'r')
             data = fptr.read()
             fptr.close()
-            return data # what if data itself is False equivalence
+            return data  # what if data itself is False equivalence
         return False
 
     def clean(self, args='rswo'):
@@ -226,6 +235,7 @@ class UNIX_Dispatcher(SH_Dispatcher):
     AF UNIX Dispatcher utilizing sockets (requires socket forwarding)
     handles submitting the script to a Runner/Worker object
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.socket = False
@@ -270,6 +280,7 @@ class UNIX_Dispatcher(SH_Dispatcher):
 
     def send(self, data):
         self.connection.sendall(data.encode())
+
     def clean(self, args='so'):
         self.connection.close()
         os.unlink(self.socketfile)
@@ -280,23 +291,28 @@ class UNIX_Dispatcher(SH_Dispatcher):
         if os.path.exists(self.runfile) and 'o' in args:
             os.remove(self.runfile)
 
+
 class INET_Dispatcher(SH_Dispatcher):
     """
     AF INET Dispatcher utilizing sockets
     handles submitting the script to a Runner/Worker object
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.socket = None
 
     def create_job(self, **kwargs):
         super().init_run(**kwargs)
-        host = socket.gethostname() #string, can be provided to bind.
+        host = socket.gethostname()  # string, can be provided to bind.
         _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        _socket.bind((host, 0)) # let OS determine the port
+        # use loopback address
+        #otherwise socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+        _socket.bind(('127.0.0.1', 0))
+        #_socket.bind((host, 0))  # let OS determine the port
         self.sockname = _socket.getsockname()
         self.socket = _socket
-        self.socket.listen(1) # one server <-> one client
+        self.socket.listen(1)  # one server <-> one client
         self.shellfile = "{}/{}.sh".format(self.cwd, self.label)  # the shellfile that will be submitted
         self.runfile = "{}/{}.run".format(self.cwd, self.label)  # the runfile created by the job
         self.submit.create_job(label=self.label, cwd=self.cwd, env=self.env, sockname=self.sockname, **kwargs)
@@ -304,7 +320,7 @@ class INET_Dispatcher(SH_Dispatcher):
 
     def submit_job(self):
         self.jobid = self.submit.submit_job()
-    
+
     def run(self, **kwargs):
         self.create_job(**kwargs)
         self.jobid = self.submit.submit_job()
@@ -328,6 +344,7 @@ class INET_Dispatcher(SH_Dispatcher):
 
     def send(self, data):
         self.connection.sendall(data.encode())
+
     def clean(self, args='so'):
         if args == 'all':
             args = 'so'

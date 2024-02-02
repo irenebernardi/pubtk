@@ -1,32 +1,39 @@
-### Submit class ###
 import os
 import subprocess
 from collections import namedtuple
 
+from pubtk.runtk import SGESubmit
+
+
+# create a template that runs a shell on personal computer
+
+#new : creating and returning new object ; init is for initializing object state
+#__new__ is a static method and param is cls, not self : it only has access to class level data, not instance level data
 class Template(object):
 
-    def __new__(cls, template = None, key_args = None, **kwargs):
+    def __new__(cls, template=None, key_args=None, **kwargs): #TODO: ask why set key_args here if defined in __init__
         if isinstance(template, Template):
             return template
         else:
-            return super().__new__(cls)
+            return super(). __new__(cls)
 
     def __init__(self, template, key_args = None, **kwargs):
-        if isinstance(template, Template): # passthrough if already a Template
+        if isinstance(template, Template):
             return
+        # if template not an instance of Template, store it as object attribute:
         self.template = template
+        #if key_args is not None, self.kwargs = key_args. If key_args is None, self.kwargs is created w the keys extracted from the template string by the get_args method.
         if key_args:
-            self.kwargs = {key: "{" + key + "}" for key in key_args}
+            self.kwargs ={key: "{" + key + "}" for key in key_args}
         else:
-            self.kwargs = {key: "{" + key + "}" for key in self.get_args()}
+            self.kwargs = {key : "{" + key + "}" for key in self.get_args() }
 
+    #order of method definition does not matter
     def get_args(self):
+        #find all characters in self.template that are enclosed in curly braces
         import re
         return re.findall(r'{(.*?)}', self.template)
 
-#    def __format__(self, **kwargs):
-#        mkwargs = self.kwargs | kwargs
-#        return self.template.format(mkwargs)
 
     def format(self, **kwargs):
         mkwargs = self.kwargs | kwargs
@@ -34,7 +41,9 @@ class Template(object):
             return self.template.format(**mkwargs)
         except KeyError as e:
             mkwargs = mkwargs | {key: "{" + key + "}" for key in self.get_args()}
-            return self.template.format(**mkwargs)
+            #return self.template.format(**mkwargs)
+            #leave placeholder as is
+            return self.template.format_map(mkwargs)
 
     def update(self, **kwargs):
         self.template = self.format(**kwargs)
@@ -45,13 +54,16 @@ class Template(object):
     def __call__(self):
         return self.template
 
+#SERIALIZERS : one key value dict, key is sh, dict is converted into a string w shell commands
 serializers = {
-    'sh': lambda x: '\nexport ' + '\nexport '.join(['{}="{}"'.format(key, val) for key, val in x.items()])
-}
+    'sh': lambda x: '\nexport ' + '\nexport '.join(['{}="{}"'.format(key, val) for key, val in x.items()])}
+
 def serialize(args, var ='env', serializer ='sh'):
     if var in args and serializer in serializers:
         args[var] = serializers[serializer](args[var])
     return args # not necessary to return
+
+
 
 
 class Submit(object):
@@ -69,10 +81,17 @@ class Submit(object):
         self.path = None
         self.handles = None
 
+
     def create_job(self, **kwargs):
         kwargs = serialize(kwargs, var = 'env', serializer = 'sh')
-        # kwargs['cwd'] = os.getcwd()
-        job = self.format_job(**kwargs) # doesn't update the templates
+        kwargs['cwd'] = os.getcwd()
+        #kwargs['sockname'] = ','.join(map(str, kwargs.get('sockname', ('', ''))))
+        #kwargs['sockname'] = '{},{}'.format(*kwargs.get('sockname', ('', '')))  # Format sockname as a string
+        # Access sockname from kwargs, not from self
+        # kwargs['sockname'] = kwargs.get('sockname', '')
+        sockname = kwargs.get('sockname', ('', ''))
+        kwargs['sockname'] = ','.join(map(str, sockname))
+        job = self.format_job(**kwargs)
         self.job = job
         self.submit = job.submit
         self.script = job.script
@@ -80,7 +99,9 @@ class Submit(object):
         fptr = open(self.path, 'w')
         fptr.write(self.script)
         fptr.close()
-
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Template before formatting: {self.script_template}")
+        print(f"Formatted script template: {self.script_template.format(**kwargs)}")
     def format_job(self, **kwargs):
         job = namedtuple('job', 'submit script path')
         submit = self.submit_template.format(**kwargs)
@@ -119,86 +140,46 @@ script:
         return template.format(**mkwargs)
 
     def create_handles(self, **kwargs):
+        # Update handles with sockname as a formatted string
+        self.handles.update({'sockname': '{},{}'.format(*kwargs.get('sockname', ('', '')))})
         self.handles.update(kwargs)
         return self.handles
 
-class SGESubmit(Submit):
-    script_args = {'label', 'cwd', 'env', 'command', 'cores', 'vmem', }
+
+#make class for regular macbook submit
+
+class Submitlocal(Submit): # no cores, no vmem
+    script_args = {'label', 'cwd', 'env', 'command', 'socname'}
+    # using bash or zsh based on user default shell
     script_template = \
         """\
-#!/bin/bash
-#$ -N j{label}
-#$ -pe smp {cores}
-#$ -l h_vmem={vmem}
-#$ -o {cwd}/{label}.run
+#!/usr/bin/env sh  
 cd {cwd}
-source ~/.bashrc
-export JOBID=$JOB_ID
-{env}
-{command}
+# setup environment
+#source ~/.zshrct4004 04t[it[ei[pe
+# set env variables 
+export SOCNAME="{sockname}"
+export STRVALUE="{strvalue}"
+export INTVALUE="{intvalue}"
+export FLTVALUE="{fltvalue}"
+#specify command to run file and where to store file output
+{command} > {cwd}/{label}.run
 """
     def __init__(self, **kwargs):
         super().__init__(
-            submit_template = Template(template="qsub {cwd}/{label}.sh", key_args={'cwd', 'label'}),
-            script_template = Template(self.script_template, key_args=self.script_args))
+            # command that submits job
+            #submit_template = Template(template="sh {cwd}/{label}.sh", key_args={'cwd', 'label'}),
+            submit_template=Template(template="sh {cwd}/{label}.sh {sockname}", key_args={'cwd', 'label', 'sockname'}),
+            script_template=Template(self.script_template, key_args=self.script_args))
+        self.job_output = None
+
 
     def submit_job(self, **kwargs):
         proc = super().submit_job()
-        try:
-            self.job_id = proc.stdout.split(' ')[2]
-        except Exception as e:
-            raise(Exception("{}\nJob submission failed:\n{}\n{}\n{}\n{}".format(e, self.submit, self.script, proc.stdout, proc.stderr)))
-        return self.job_id
+        #no job ids locally
+        self.job_output = proc.stdout
+        return self.job_output
 
-    def set_handles(self):
-        pass
 
-class SGESubmitSFS(SGESubmit):
-    script_args = {'label', 'cwd', 'env', 'command', 'cores', 'vmem', }
-    script_template = \
-        """\
-#!/bin/bash
-#$ -N j{label}
-#$ -pe smp {cores}
-#$ -l h_vmem={vmem}
-#$ -o {cwd}/{label}.run
-cd {cwd}
-source ~/.bashrc
-export OUTFILE="{label}.out"
-export SGLFILE="{label}.sgl"
-export JOBID=$JOB_ID
-{env}
-{command}
-"""
 
-class SGESubmitSOCK(SGESubmit):
-    script_args = {'label', 'cwd', 'env', 'command', 'cores', 'vmem', 'socname'}
-    script_template = \
-        """\
-#!/bin/bash
-#$ -N job{label}
-#$ -pe smp {cores}
-#$ -l h_vmem={vmem}
-#$ -o {cwd}/{label}.run
-cd {cwd}
-source ~/.bashrc
-export SOCNAME="{sockname}"
-{env}
-{command}
-"""
 
-class SGESubmitINET(SGESubmit):
-    script_args = {'label', 'cwd', 'env', 'command', 'cores', 'vmem', 'sockname'}
-    script_template = \
-        """\
-#!/bin/bash
-#$ -N {label}
-#$ -pe smp {cores}
-#$ -l h_vmem={vmem}
-#$ -o {cwd}/{label}.run
-cd {cwd}
-source ~/.bashrc
-export SOCNAME="{sockname}"
-{env}
-{command}
-"""

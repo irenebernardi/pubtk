@@ -39,16 +39,19 @@ class TestSGEINET:
         #print(dispatcher.shellfile)
         with open(dispatcher.shellfile, 'r') as fptr:
             script = fptr.read()
-            #print(script)
+        #print(script)
         logger.info("script:\n{}".format(script))
         logger.info("port info (dispatcher listen):\n{}".format(get_port_info(dispatcher.sockname[1])))
         assert 'python test.py' in script
         env = get_exports(dispatcher.shellfile)
-
+        #TODO remove
+        print(f'env is {env}')
         logger.info(env)
         runner = HPCRunner(env=env)
         logger.info("runner.socketname:\n{}".format(runner.socketname))
         runner.connect()
+        #TODO delete
+        print(f'socket is {runner.socketname}')
         connection, peer_address = dispatcher.accept()
         logger.info("port info (runner connect):\n{}".format(get_port_info(dispatcher.sockname[1])))
         logger.info("runner.host_socket:\n{}".format(runner.host_socket))
