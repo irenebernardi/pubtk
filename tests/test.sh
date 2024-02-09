@@ -1,7 +1,7 @@
 #!/usr/bin/env sh  
 cd {cwd}
 # setup environment
-#source ~/.zshrc
+#source ~/.zshrct4004 04t[it[ei[pe
 # set env variables 
 export SOCNAME="{sockname}"
 export STRVALUE="{strvalue}"

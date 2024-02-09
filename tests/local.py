@@ -84,13 +84,17 @@ class Submit(object):
 
     def create_job(self, **kwargs):
         kwargs = serialize(kwargs, var = 'env', serializer = 'sh')
-        kwargs['cwd'] = os.getcwd()
-        #kwargs['sockname'] = ','.join(map(str, kwargs.get('sockname', ('', ''))))
-        #kwargs['sockname'] = '{},{}'.format(*kwargs.get('sockname', ('', '')))  # Format sockname as a string
-        # Access sockname from kwargs, not from self
+        # cwd = os.getcwd()
+        # kwargs['cwd'] = os.getcwd()
+        # print(f"CWD: {cwd}")  # Print current working directory for debugging
+        # kwargs['cwd'] = cwd  # Set cwd in kwargs
+        print(f"Formatted script template: {self.script_template.format(**kwargs)}")
+        # kwargs['sockname'] = ','.join(map(str, kwargs.get('sockname', ('', ''))))
+        # kwargs['sockname'] = '{},{}'.format(*kwargs.get('sockname', ('', '')))  # Format sockname as a string
+        # # Access sockname from kwargs, not from self
         # kwargs['sockname'] = kwargs.get('sockname', '')
-        sockname = kwargs.get('sockname', ('', ''))
-        kwargs['sockname'] = ','.join(map(str, sockname))
+        # sockname = kwargs.get('sockname', ('', ''))
+        # kwargs['sockname'] = ','.join(map(str, sockname))
         job = self.format_job(**kwargs)
         self.job = job
         self.submit = job.submit
@@ -148,8 +152,8 @@ script:
 
 #make class for regular macbook submit
 
-class Submitlocal(Submit): # no cores, no vmem
-    script_args = {'label', 'cwd', 'env', 'command', 'socname'}
+class Submitlocal(Submit):  # no cores, no vmem
+    script_args = {'label', 'cwd', 'env', 'command', 'sockname'}
     # using bash or zsh based on user default shell
     script_template = \
         """\
@@ -157,13 +161,17 @@ class Submitlocal(Submit): # no cores, no vmem
 cd {cwd}
 # setup environment
 #source ~/.zshrct4004 04t[it[ei[pe
+source ~/.bashrc
 # set env variables 
 export SOCNAME="{sockname}"
 export STRVALUE="{strvalue}"
 export INTVALUE="{intvalue}"
 export FLTVALUE="{fltvalue}"
 #specify command to run file and where to store file output
-{command} > {cwd}/{label}.run
+{command} > {cwd}/{label}.run 
+{env}
+{command}
+
 """
     def __init__(self, **kwargs):
         super().__init__(

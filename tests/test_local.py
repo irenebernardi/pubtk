@@ -27,6 +27,7 @@ class TestSubmitLocal(object):
         print(f'script is {script}')
         #assert 'echo "test"' in script
         #check that cd matches the one in update_templates()
+        print(f' cwd is {os.getcwd()}')
         assert 'cd {}'.format(os.getcwd()) in script
         '''# check that script is made with sh shell
         assert '#!/usr/bin/env sh' in script

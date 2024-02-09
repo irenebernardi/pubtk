@@ -1,7 +1,7 @@
 import pytest
 import os
 from pubtk.runtk.dispatchers import Dispatcher, SFS_Dispatcher, INET_Dispatcher
-from pubtk.runtk.submit import Submit, SGESubmitINET, SGESubmitSFS
+# from pubtk.runtk.submit import Submit, SGESubmitINET, SGESubmitSFS
 from pubtk.runtk.runners import HPCRunner
 from pubtk.utils import get_exports, get_port_info
 import logging
@@ -23,12 +23,12 @@ class TestLocalSubmit(object):
     def dispatcher_setup(self):
 
         dispatcher = INET_Dispatcher(cwd=os.getcwd(),
-                                   submit=Submitlocal(),
-                                   gid='localrun')
+                                        submit=Submitlocal(),
+                                        gid='localrun')
         dispatcher.update_env({'strvalue': '1',
                                'intvalue': 2,
                                'fltvalue': 3.0})
-        dispatcher.submit.update_templates(command='echo "test"')
+        dispatcher.submit.update_templates(command='python test')
 
         return dispatcher
 
@@ -37,9 +37,7 @@ class TestLocalSubmit(object):
         dispatcher.create_job() #create_job is Submit method
         #check that shell script was created
         assert os.path.exists(dispatcher.shellfile)
-        dispatcher.socketname = f'{dispatcher.sockname[0]},{dispatcher.sockname[1]}'
-
-
+        dispatcher.sockname = f'{dispatcher.sockname[0]},{dispatcher.sockname[1]}'
 
         ### logger: records events that happen as program runs at INFO level and above
         # log env variables of dispatcher object and convert to JSON formatted string
@@ -54,6 +52,7 @@ class TestLocalSubmit(object):
             script = fptr.read()
         print(script) #display on terminal, although line below also saves it to localtest_job.log
         logger.info('script: \n{}'.format(script))
+
         # log the port that the dispatcher is listening to (socket is tuple of address and port)
         # line below too many values to unpack
         #logger.info("port info (dispatcher listen):\n{}".format(get_port_info(dispatcher.sockname[1])))
@@ -64,16 +63,21 @@ class TestLocalSubmit(object):
         #logger.info("runner.socketname: IP={}, Port={}".format(*runner.socketname))
 
         #command in dispatcher_setup
-        #assert 'echo "test"' in script
+        # assert 'echo "test"' in script
         # parse shell file to extract env variables
         env = get_exports(dispatcher.shellfile)
+
         #determine that env actually contains right env variables  before creating HPC runner oject
         print(f'env is {env}')
         #log shellfile env variables in log output
         logger.info(env)
         # select runner with shellfile env variables
-        #runner = HPCRunner(env=env)
-        runner = HPCRunner(env=env, socketname=dispatcher.sockname)
+        runner = HPCRunner(env=env)
+        # runner = HPCRunner(env=env, socketname=dispatcher.sockname)
+        # print(f'type of dispatcher.socketname is {type(dispatcher.socketname)}')
+        # print(f'dispatcher.socketname values are {dispatcher.socketname}')
+        # print(f'socket fed to runner is{runner.socketname}')
+        # print(f'type of socket fed to runner is {type(runner.socketname)}')
         #log which socket name is used by runner
         print(f'socket is  {runner.socketname}')
         logger.info("runner.socketname:\n{}".format(runner.socketname))

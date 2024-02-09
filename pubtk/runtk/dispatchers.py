@@ -301,6 +301,8 @@ class INET_Dispatcher(SH_Dispatcher):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.socket = None
+        # add self.socketname for local run
+        self.socketname = None
 
     def create_job(self, **kwargs):
         super().init_run(**kwargs)
