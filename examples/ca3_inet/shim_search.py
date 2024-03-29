@@ -3,18 +3,17 @@ import pandas
 import json
 import os
 import numpy
-
 from ray import tune
 from ray import air
 from ray.air import session
-
 from ray.tune.search import create_searcher, ConcurrencyLimiter, SEARCH_ALG_IMPORT
-
-from pubtk.runtk.dispatchers import SFS_Dispatcher
-from pubtk.runtk.submit import Submit
-
+from pubtk.runtk.dispatchers import SFS_Dispatcher, UNIXINET_Dispatcher
+from pubtk.runtk.submits import Submit, ZSHSubmitSOCK
 import time
-ALGORITHM = "cfo"
+
+ALGORITHM = "optuna"
+ALGO = ALGORITHM
+absolute_path = os.path.abspath("../ray_ses")
 
 CONCURRENCY = 1
 
@@ -65,10 +64,12 @@ TARGET = pandas.Series(
      'OLM': 3.47,}
 )
 
-def sge_run(config):
-    sge = Submit(submit_template = "qsub {cwd}/{label}.sh", script_template = template)
-    dispatcher = SFS_Dispatcher(cwd = cwd, env = {}, submit = sge)
-    dispatcher.add_dict(value_type="FLOAT", dictionary = config)
+def local_run(config):
+    #this below substitutes submit
+    sockname = "/tmp/mysocket.s"
+    run =  ZSHSubmitSOCK(script_template=template, sockname=sockname)
+    #dispatcher = SFS_Dispatcher(cwd = cwd, env = {}, submit = sge)
+    dispatcher = UNIXINET_Dispatcher(project_path = cwd, env={}, submit=run, socket_type = 'UNIX')
     dispatcher.run()
     data = dispatcher.get_run()
     while not data:
@@ -89,13 +90,13 @@ ray.init(
                               ]}
 )
 
-algo = ConcurrencyLimiter(searcher=searcher, max_concurrent=CONCURRENCY, batch= True)
+algo = ConcurrencyLimiter(searcher=searcher, max_concurrent=CONCURRENCY, batch=True)
 
 print("====={} search=====")
 print(param_space)
 
 tuner = tune.Tuner(
-    sge_run, #objective (on machine) sge_objective (on submit)
+    local_run, #objective (on machine) sge_objective (on submit)
     tune_config=tune.TuneConfig(
         search_alg=algo,
         metric="loss",
@@ -103,7 +104,7 @@ tuner = tune.Tuner(
         num_samples=NTRIALS,
     ),
     run_config=air.RunConfig(
-        local_dir="../ray_ses",
+        local_dir=absolute_path,
         name=ALGORITHM,
     ),
     param_space=param_space,

@@ -372,7 +372,7 @@ class UNIX_Dispatcher(SH_Dispatcher):
 
     def send(self, data):
         self.socket.send(data)
-    def clean(self, handles=None):
+    def clean(self, handles = None):
         super().clean(handles)
         if self.socket:
             self.socket.close()
@@ -421,6 +421,180 @@ class INET_Dispatcher(SH_Dispatcher):
 
     def send(self, data):
         self.socket.send(data)
+    def clean(self, handles=None):
+        super().clean(handles)
+        if self.socket:
+            self.socket.close()
+
+
+'''    class UNIXSOCKET_Dispatcher(SH_Dispatcher):
+        # TODO can we consolidate UNIX_Dispatcher and SOCKET_Dispatcher into a single class?
+        def __init__(self, socket_type, **kwargs):  # TODO or Boolean?
+            super().__init__(**kwargs)
+            self.socket = None
+            self.server = None  # this was UNIX, should this be left here?
+            self.socket_type = socket_type.upper()  # fix cases here to avvoid doing it multiple times below TODO default arg socket
+            self.socket_name = None
+            self.initialize_socket() # do i need this actually
+
+
+        # determine which socket_type
+        def initialize_socket(self):
+            if self.socket_type == 'UNIX':
+                self.socket_name = "{}/{}.s".format(self.output_path,
+                                                    self.label)  # shouldnt socket_name be  initialized somewhere in init?
+                self.socket = UNIXSocket(socket_name=self.socket_name)
+            elif self.socket_type == 'INET':
+                # self.socket_name = self.socket.listen()
+                self.socket = INETSocket()
+            else:
+                raise ValueError('Socket type not supported')
+
+
+        def create_job(self, **kwargs):
+            super().init_run(**kwargs)  # why only INET uses gid? not UNIX
+            # assuming line above is for both INET and UNIX
+            super().create_job()
+            #UNIX specific:
+            if self.socket_type == 'UNIX': # is this if socket_type redundant? with other method too
+                try:
+                    #checks that creates socket fine
+                    os.unlink(self.socket_name) #is it correct here that i should just use self.socket_name and not socket_name?
+                except OSError as e:
+                    if os.path.exists(self.socket_name):
+                        raise OSError("issue when creating socket {}:".format(self.socket_name), e)
+            # if inet, cant listen twice
+            # TODO find a way that socket name is assigned to self.socket.listen() and also separately listens for unix but not redundantly twice for both
+            self.socket.listen()
+            self.submit.create_job(label=self.label, project_path=self.project_path,
+                               output_path=self.output_path, env=self.env, sockname=self.socket_name, **kwargs)
+            self.handles = self.submit.get_handles()
+            # TODO try with testbench and see if bidirectional comms ok w unix and inet
+            # TODO merge stuff inside initialize_socket just at the top of create job
+            # TODO test if os.unlink even needed, if not just remove
+            # TODO changing source code for sockets ? with socket_Type check
+            # TODO read notion notes and make sure following steps
+
+
+    def submit_job(self):
+        self.job_id = self.submit.submit_job()
+
+    def run(self, **kwargs):
+        self.create_job(**kwargs)
+        self.job_id = self.submit.submit_job()
+
+    def accept(self):
+        """
+        accept incoming connection from client
+        this function is blocking
+        """
+        connection, peer_address = self.socket.accept()  # actual blocking statement
+        return connection, peer_address
+
+    def recv(self):
+        """
+
+        Returns
+        -------
+
+        """
+        return self.socket.recv()
+
+    def send(self, data):
+        self.socket.send(data)
+    def clean(self, handles=None):
+        super().clean(handles)
+        if self.socket:
+            self.socket.close()
+'''
+#everything within create_job
+class UNIXINET_Dispatcher(SH_Dispatcher):
+    # TODO can we consolidate UNIX_Dispatcher and SOCKET_Dispatcher into a single class?
+    def __init__(self, socket_type, **kwargs):
+        super().__init__(**kwargs)
+        #self.socket = None
+        self.server = None #are these two necessary?
+        self.socket_type = socket_type.upper()  # fix cases here to avvoid doing it multiple times below
+        # TODO default arg socket
+        self.socket_name = None
+        self.initialize_socket()
+
+    # determine which socket_type and listen accordingly
+    def initialize_socket(self):
+        if self.socket_type == 'UNIX':
+            self.socket_name = "{}/{}.s".format(self.output_path, self.label)  # shouldnt socket_name be  initialized somewhere in init?
+            # TODO test if useful
+            try:
+                os.unlink(
+                    self.socket_name)
+            except OSError as e:
+                if os.path.exists(self.socket_name):
+                    raise OSError("issue when creating socket {}:".format(self.socket_name), e)
+            # should be initialized after checking if prior socket exists
+            self.socket = UNIXSocket(socket_name=self.socket_name)
+            self.socket.listen()
+            print(f'this should say unix {self.socket}')
+        elif self.socket_type == 'INET':
+            self.socket = INETSocket()
+            self.socket_name = self.socket.listen()
+            print(f'this should say INET {self.socket}')
+
+
+        else:
+            raise ValueError('Socket type not supported')
+
+    #to avoid RAY serialization of socket
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Exclude the socket and any other non-serializable attributes
+        state.pop('socket', None)
+        return state
+    def create_job(self, **kwargs):
+        super().init_run(**kwargs)
+        super().create_job()
+
+        self.submit.create_job(label=self.label, project_path=self.project_path,
+                           output_path=self.output_path, env=self.env, sockname=self.socket_name, **kwargs)
+        self.handles = self.submit.get_handles()
+    # TODO try with testbench and see if bidirectional comms ok w unix and inet
+    # TODO merge stuff inside initialize_socket just at the top of create job
+    # TODO test if os.unlink even needed, if not just remove
+    # TODO changing source code for sockets ? with socket_Type check
+    # TODO read notion notes and make sure following steps
+
+
+    def submit_job(self):
+        self.job_id = self.submit.submit_job()
+
+
+    def run(self, **kwargs):
+        self.create_job(**kwargs)
+        self.job_id = self.submit.submit_job()
+
+
+    def accept(self):
+        """
+        accept incoming connection from client
+        this function is blocking
+        """
+        connection, peer_address = self.socket.accept()  # actual blocking statement
+        return connection, peer_address
+
+
+    def recv(self):
+        """
+
+        Returns
+        -------
+
+        """
+        return self.socket.recv()
+
+
+    def send(self, data):
+        self.socket.send(data)
+
+
     def clean(self, handles=None):
         super().clean(handles)
         if self.socket:
